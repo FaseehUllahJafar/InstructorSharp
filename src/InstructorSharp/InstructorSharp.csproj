@@ -1,0 +1,51 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!--
+      net10.0  - current LTS, supported to Nov 2028.
+      net8.0   - still the most deployed modern target; .NET 9 apps resolve to this asset, so a
+                 separate net9.0 target buys no reach and both reach end of support on the same
+                 day (10 Nov 2026) anyway.
+      netstandard2.0 - .NET Framework 4.6.2+, which is where a large amount of enterprise .NET
+                 still runs and where no other structured-extraction library for C# goes.
+    -->
+    <TargetFrameworks>net10.0;net8.0;netstandard2.0</TargetFrameworks>
+    <PackageId>InstructorSharp</PackageId>
+    <Title>InstructorSharp</Title>
+    <Description>Validated, strongly-typed objects out of any LLM. Wraps any Microsoft.Extensions.AI IChatClient, generates a JSON schema from your POCO, validates the result, and retries by feeding the exact validation errors back to the model. Supports streaming partial objects, streaming iterables, token budgets, and runs on .NET Framework 4.6.2+ through .NET 10.</Description>
+    <!--
+      Trim/AOT analyzers run on every modern target so reflection creeping into the extraction
+      path fails the build rather than failing in someone's published app. IsTrimmable (which
+      stamps the assembly and pulls in the ILLink tasks) is applied at pack time via the
+      -p:IsTrimmable=true switch in CI, keeping ordinary local builds light.
+    -->
+    <EnableAotAnalyzer Condition="'$(TargetFramework)' != 'netstandard2.0'">true</EnableAotAnalyzer>
+    <EnableTrimAnalyzer Condition="'$(TargetFramework)' != 'netstandard2.0'">true</EnableTrimAnalyzer>
+    <EnableSingleFileAnalyzer Condition="'$(TargetFramework)' != 'netstandard2.0'">true</EnableSingleFileAnalyzer>
+  </PropertyGroup>
+
+  <!--
+    Two dependencies, both abstraction-only. Notably absent: any provider SDK. Which model you
+    talk to is the consumer's choice, expressed by whichever IChatClient they hand us.
+  -->
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.AI.Abstractions" Version="10.2.0" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.2" />
+  </ItemGroup>
+
+  <!--
+    Types that are in-box from net8.0 onward but ship as packages for .NET Framework:
+    IAsyncEnumerable, Activity/Meter, and the DataAnnotations attributes.
+  -->
+  <ItemGroup Condition="'$(TargetFramework)' == 'netstandard2.0'">
+    <PackageReference Include="Microsoft.Bcl.AsyncInterfaces" Version="10.0.2" />
+    <PackageReference Include="System.Diagnostics.DiagnosticSource" Version="10.0.2" />
+    <PackageReference Include="System.ComponentModel.Annotations" Version="5.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="InstructorSharp.Tests" />
+    <InternalsVisibleTo Include="InstructorSharp.FluentValidation" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFrameworks>net10.0;net8.0</TargetFrameworks>
+    <IsPackable>false</IsPackable>
+    <OutputType>Exe</OutputType>
+    <TestingPlatformDotnetTestSupport>true</TestingPlatformDotnetTestSupport>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <!--
+      xUnit1051 asks every await to thread TestContext.Current.CancellationToken. That guards
+      against hangs in tests that do real I/O; these run against an in-memory fake with no
+      awaits that can block, so the token would be pure noise. Cancellation itself is covered
+      explicitly by Cancellation_is_observed.
+    -->
+    <NoWarn>$(NoWarn);CA1707;xUnit1051</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="xunit.v3" Version="3.2.2" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.3" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\InstructorSharp\InstructorSharp.csproj" />
+    <ProjectReference Include="..\..\src\InstructorSharp.FluentValidation\InstructorSharp.FluentValidation.csproj" />
+  </ItemGroup>
+
+</Project>
