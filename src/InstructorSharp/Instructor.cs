@@ -505,6 +505,15 @@ public sealed class Instructor : IInstructor
     /// </summary>
     private static string SanitizeSchemaName(string name)
     {
+        // Providers cap schema names well below this; the limit also keeps the stackalloc
+        // bounded rather than trusting the length of an arbitrary generated type name.
+        const int MaxLength = 64;
+
+        if (name.Length > MaxLength)
+        {
+            name = name.Substring(0, MaxLength);
+        }
+
         Span<char> buffer = stackalloc char[name.Length];
         int length = 0;
 
