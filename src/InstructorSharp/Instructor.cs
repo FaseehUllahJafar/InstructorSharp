@@ -177,7 +177,7 @@ public sealed class Instructor : IInstructor
 
         InstructorOptions effective = options ?? _defaults;
         SchemaDescriptor schema = SchemaGenerator.For(typeof(T), effective);
-        ExtractionStrategy strategy = SelectStrategy(effective.Mode);
+        ExtractionStrategy strategy = SelectStreamingStrategy(effective.Mode);
         JsonTypeInfo<T> typeInfo = ResolveTypeInfo<T>(effective);
 
         var attemptMessages = new List<ChatMessage>(messages);
@@ -187,13 +187,13 @@ public sealed class Instructor : IInstructor
             attemptMessages, chatOptions, schema.Schema, schema.SchemaText,
             effective.SchemaName ?? SanitizeSchemaName(typeof(T).Name), typeof(T)));
 
-        var buffer = new System.Text.StringBuilder();
+        var buffer = new StreamingJsonBuffer();
         string lastEmitted = string.Empty;
 
         await foreach (ChatResponseUpdate update in
             _client.GetStreamingResponseAsync(attemptMessages, chatOptions, cancellationToken).ConfigureAwait(false))
         {
-            string chunk = ExtractStreamingChunk(update);
+            string chunk = update.Text ?? string.Empty;
             if (chunk.Length == 0)
             {
                 continue;
@@ -201,7 +201,7 @@ public sealed class Instructor : IInstructor
 
             buffer.Append(chunk);
 
-            if (!PartialJsonCompleter.TryComplete(buffer.ToString(), out string completed))
+            if (!buffer.TryComplete(out string completed))
             {
                 continue;
             }
@@ -221,7 +221,7 @@ public sealed class Instructor : IInstructor
         }
 
         // The final value is the only one that gets validated, and it is always emitted.
-        string finalText = buffer.ToString();
+        string finalText = buffer.GetText();
         if (!JsonExtractor.TryExtract(finalText, out string finalJson))
         {
             throw new ExtractionFailedException(typeof(T),
@@ -285,18 +285,43 @@ public sealed class Instructor : IInstructor
         }
     }
 
-    private static string ExtractStreamingChunk(ChatResponseUpdate update)
+    /// <summary>
+    /// Picks a strategy whose output arrives as streamed text.
+    /// </summary>
+    /// <remarks>
+    /// Tool calling is excluded from streaming on purpose. Providers deliver partial tool
+    /// arguments inconsistently -- some send JSON fragments, some re-send the whole argument
+    /// object each update -- so appending what arrives produces either duplicated or corrupt
+    /// JSON depending on who is on the other end. Rather than guess, streaming drops to the
+    /// strongest text-producing mode the provider supports, which is deterministic and correct
+    /// everywhere. An explicitly requested mode is still honoured.
+    /// </remarks>
+    private ExtractionStrategy SelectStreamingStrategy(ExtractionMode mode)
     {
-        // Tool-call mode streams arguments as content rather than text.
-        foreach (AIContent content in update.Contents)
+        ExtractionStrategy selected = SelectStrategy(mode);
+
+        if (mode != ExtractionMode.Auto || selected.Mode != ExtractionMode.ToolCall)
         {
-            if (content is FunctionCallContent call && call.Arguments is not null)
+            return selected;
+        }
+
+        var metadata = _client.GetService(typeof(ChatClientMetadata)) as ChatClientMetadata;
+
+        ExtractionStrategy? best = null;
+        foreach (ExtractionStrategy candidate in _strategies)
+        {
+            if (candidate.Mode == ExtractionMode.ToolCall)
             {
-                return ToolArgumentWriter.Write(call.Arguments);
+                continue;
+            }
+
+            if (candidate.CanHandle(metadata) && (best is null || candidate.Priority > best.Priority))
+            {
+                best = candidate;
             }
         }
 
-        return update.Text ?? string.Empty;
+        return best ?? selected;
     }
 
     private bool TryDeserializeSnapshot<T>(

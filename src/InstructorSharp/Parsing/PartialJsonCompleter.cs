@@ -38,19 +38,46 @@ internal static class PartialJsonCompleter
     internal static bool TryComplete(string? partial, out string json)
     {
         json = string.Empty;
-        if (string.IsNullOrWhiteSpace(partial))
+        if (string.IsNullOrEmpty(partial))
         {
             return false;
         }
 
-        int start = partial!.IndexOfAny(['{', '[']);
+        return TryComplete(Encoding.UTF8.GetBytes(partial!), out json);
+    }
+
+    /// <summary>
+    /// Completes a partial JSON document held as UTF-8 bytes.
+    /// </summary>
+    /// <param name="utf8">Bytes received so far.</param>
+    /// <param name="json">A syntactically valid JSON document representing what has arrived.</param>
+    /// <returns>True when something parseable could be produced.</returns>
+    /// <remarks>
+    /// The byte overload is the one the streaming path uses, so that an accumulating buffer is
+    /// never re-encoded from scratch on every chunk.
+    /// </remarks>
+    internal static bool TryComplete(ReadOnlySpan<byte> utf8, out string json)
+    {
+        json = string.Empty;
+
+        // '{' and '[' cannot occur inside a multi-byte UTF-8 sequence -- continuation bytes are
+        // all >= 0x80 -- so scanning raw bytes for the document start is safe.
+        int start = -1;
+        for (int i = 0; i < utf8.Length; i++)
+        {
+            if (utf8[i] is (byte)'{' or (byte)'[')
+            {
+                start = i;
+                break;
+            }
+        }
+
         if (start < 0)
         {
             return false;
         }
 
-        string body = partial.Substring(start);
-        byte[] bytes = Encoding.UTF8.GetBytes(body);
+        ReadOnlySpan<byte> bytes = utf8.Slice(start);
 
         var stack = new List<byte>();
         var safeStack = new List<byte>();
@@ -104,10 +131,11 @@ internal static class PartialJsonCompleter
             return false;
         }
 
-        // safeConsumed counts bytes; the prefix up to a token boundary is always valid UTF-8.
-        var builder = new StringBuilder(Encoding.UTF8.GetString(bytes, 0, (int)safeConsumed));
+        // safeConsumed counts bytes, and a token boundary never falls inside a UTF-8 sequence,
+        // so both halves decode cleanly.
+        var builder = new StringBuilder(ToUtf8String(bytes.Slice(0, (int)safeConsumed)));
 
-        string leftover = Encoding.UTF8.GetString(bytes, (int)safeConsumed, bytes.Length - (int)safeConsumed);
+        string leftover = ToUtf8String(bytes.Slice((int)safeConsumed));
         AppendSalvagedStringValue(builder, leftover, safeStack);
 
         for (int i = safeStack.Count - 1; i >= 0; i--)
@@ -187,10 +215,27 @@ internal static class PartialJsonCompleter
 
         if (key is not null)
         {
-            builder.Append('"').Append(EscapeJsonString(key)).Append("\":");
+            // key is the raw source text between the quotes, with its escapes still written as
+            // the model wrote them. Re-escaping it here would turn a legitimate \" into \\" and
+            // break the document, so it is emitted verbatim.
+            builder.Append('"').Append(key).Append("\":");
         }
 
         builder.Append('"').Append(TrimDanglingEscape(value)).Append('"');
+    }
+
+    private static string ToUtf8String(ReadOnlySpan<byte> utf8)
+    {
+        if (utf8.IsEmpty)
+        {
+            return string.Empty;
+        }
+
+#if NETSTANDARD_POLYFILL
+        return Encoding.UTF8.GetString(utf8.ToArray());
+#else
+        return Encoding.UTF8.GetString(utf8);
+#endif
     }
 
     private static void SkipWhitespace(string text, ref int i)
@@ -284,10 +329,4 @@ internal static class PartialJsonCompleter
         return count;
     }
 
-    private static string EscapeJsonString(string value)
-    {
-        // Keys come straight from a document the reader already accepted, so they are valid
-        // JSON string content; only the delimiter needs guarding.
-        return value.Replace("\"", "\\\"");
-    }
 }

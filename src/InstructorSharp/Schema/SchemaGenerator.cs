@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using System.Threading;
 using Microsoft.Extensions.AI;
 
 namespace InstructorSharp.Schema;
@@ -27,7 +28,17 @@ namespace InstructorSharp.Schema;
 /// </remarks>
 internal static class SchemaGenerator
 {
+    /// <summary>
+    /// Ceiling on cached schemas. The key includes the caller's <see cref="JsonSerializerOptions"/>
+    /// by reference, so an application that builds fresh options per request would otherwise never
+    /// hit the cache and would grow it without bound for the life of the process. Past this point
+    /// schemas are still generated correctly, just not retained.
+    /// </summary>
+    private const int MaxCachedSchemas = 512;
+
     private static readonly ConcurrentDictionary<SchemaCacheKey, SchemaDescriptor> Cache = new();
+
+    private static int _cacheCount;
 
     /// <summary>Keywords the strict provider subset rejects, mapped to how they read in prose.</summary>
     private static readonly (string Keyword, string Label)[] DemotedKeywords =
@@ -49,7 +60,30 @@ internal static class SchemaGenerator
     internal static SchemaDescriptor For(Type type, InstructorOptions options)
     {
         var key = new SchemaCacheKey(type, options.UseStrictSchema, options.SerializerOptions);
-        return Cache.GetOrAdd(key, static k => Build(k.Type, k.Strict, k.SerializerOptions));
+
+        if (Cache.TryGetValue(key, out SchemaDescriptor? cached))
+        {
+            return cached;
+        }
+
+        SchemaDescriptor descriptor = Build(key.Type, key.Strict, key.SerializerOptions);
+
+        // Volatile.Read of a plain counter rather than ConcurrentDictionary.Count, which takes
+        // every bucket lock and would turn each cache miss into a contention point.
+        if (Volatile.Read(ref _cacheCount) < MaxCachedSchemas)
+        {
+            // Racing callers may both build; whichever lands first wins and the other is
+            // discarded. Schemas are immutable, so that costs a little work and nothing else.
+            SchemaDescriptor stored = Cache.GetOrAdd(key, descriptor);
+            if (ReferenceEquals(stored, descriptor))
+            {
+                Interlocked.Increment(ref _cacheCount);
+            }
+
+            descriptor = stored;
+        }
+
+        return descriptor;
     }
 
     private static SchemaDescriptor Build(Type type, bool strict, JsonSerializerOptions serializerOptions)

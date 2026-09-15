@@ -74,14 +74,15 @@ internal sealed class DataAnnotationsValidator
             return;
         }
 
-        // Reference cycles are possible once a graph has been rehydrated; without this a
-        // self-referencing object would recurse until the stack gave out.
+        // Two problems, one guard. A reference cycle would recurse until the stack gave out, and
+        // a shared node reachable by several paths would be re-walked once per path, which is
+        // exponential on a wide graph. Membership is therefore permanent for the whole walk:
+        // each object is validated exactly once, under the first path that reaches it.
         if (!visited.Add(value))
         {
             return;
         }
 
-        try
         {
             if (value is IDictionary dictionary)
             {
@@ -117,10 +118,6 @@ internal sealed class DataAnnotationsValidator
 
                 Walk(child, $"{path}.{JsonNameOf(property)}", failures, visited, depth + 1);
             }
-        }
-        finally
-        {
-            visited.Remove(value);
         }
     }
 

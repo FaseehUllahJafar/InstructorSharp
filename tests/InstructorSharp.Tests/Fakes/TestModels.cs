@@ -57,3 +57,18 @@ public sealed class Task_
 
     public Priority Priority { get; set; }
 }
+
+/// <summary>
+/// A node whose two children can point at the same object, forming a diamond. Chaining these
+/// builds a graph with an exponential number of distinct paths but only a linear number of
+/// distinct nodes, which is what separates a correct visited-set from a broken one.
+/// </summary>
+public sealed class DiamondNode
+{
+    [Required]
+    public string Name { get; set; } = string.Empty;
+
+    public DiamondNode? Left { get; set; }
+
+    public DiamondNode? Right { get; set; }
+}

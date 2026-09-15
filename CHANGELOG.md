@@ -29,5 +29,10 @@ First release. The API may still move before 1.0.0.
 - OpenTelemetry `ActivitySource` and `Meter`, both named `InstructorSharp`.
 - Targets `net10.0`, `net8.0` and `netstandard2.0` (.NET Framework 4.6.2+).
 
+### Notes
+
+Streaming deliberately does not use tool-call mode, and does not run the repair loop. See
+`docs/architecture.md` for the reasoning behind both.
+
 [Unreleased]: https://github.com/faseehjafar/InstructorSharp/compare/v0.1.0...HEAD
 [0.1.0]: https://github.com/faseehjafar/InstructorSharp/releases/tag/v0.1.0

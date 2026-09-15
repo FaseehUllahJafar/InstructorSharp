@@ -180,9 +180,17 @@ await foreach (var item in instructor.StreamListAsync<ActionItem>(transcript))
 }
 ```
 
-One deliberate detail: a partially-received **string** is shown as it arrives, but a partially
-received **number** is withheld until it is provably complete. A half-written string reads as
-obviously mid-word; a half-written `123` looks exactly like a confident `1`.
+Two deliberate details:
+
+- A partially-received **string** is shown as it arrives, but a partially-received **number** is
+  withheld until provably complete. A half-written string reads as obviously mid-word; a
+  half-written `123` looks exactly like a confident `1`.
+- Streaming never uses tool-call mode. Providers deliver partial tool arguments inconsistently,
+  so on a tool-calling provider such as Anthropic, `StreamAsync` drops to the strongest
+  text-producing mode instead of guessing. Non-streaming calls are unaffected.
+
+There is no repair loop while streaming, by design: output a user has already seen cannot be
+silently retried. The final object is validated, and an invalid one throws.
 
 ---
 

@@ -30,7 +30,7 @@ internal static class JsonExtractor
         string trimmed = text!.Trim();
 
         // Fast path: the whole response is already a document.
-        if (IsBalancedDocument(trimmed))
+        if (IsBalancedDocument(trimmed) && IsParseable(trimmed))
         {
             json = trimmed;
             return true;
@@ -85,9 +85,14 @@ internal static class JsonExtractor
     }
 
     /// <summary>
-    /// Scans for the first <c>{</c> or <c>[</c> that begins a balanced document. Tries each
-    /// candidate in turn, because a preamble may itself contain a stray brace.
+    /// Scans for the first <c>{</c> or <c>[</c> that begins a balanced, parseable document.
     /// </summary>
+    /// <remarks>
+    /// Balance alone is not enough. A preamble such as <c>Here is the { object } you wanted:</c>
+    /// contains a perfectly balanced pair of braces that is not JSON, and returning it would
+    /// cost a whole repair round trip to discover. Each candidate is therefore parsed before
+    /// being accepted, and the scan continues past the ones that fail.
+    /// </remarks>
     private static bool TryScan(string text, out string json)
     {
         json = string.Empty;
@@ -100,14 +105,49 @@ internal static class JsonExtractor
                 continue;
             }
 
-            if (TryMatchFrom(text, start, out int end))
+            if (!TryMatchFrom(text, start, out int end))
             {
-                json = text.Substring(start, end - start + 1);
+                continue;
+            }
+
+            string candidate = text.Substring(start, end - start + 1);
+
+            if (IsParseable(candidate))
+            {
+                json = candidate;
                 return true;
             }
+
         }
 
         return false;
+    }
+
+    private static bool IsParseable(string candidate)
+    {
+        try
+        {
+            using var _ = System.Text.Json.JsonDocument.Parse(
+                candidate,
+                new System.Text.Json.JsonDocumentOptions
+                {
+                    AllowTrailingCommas = true,
+                    CommentHandling = System.Text.Json.JsonCommentHandling.Skip,
+
+                    // Deliberately far beyond anything a model emits, so that depth is never the
+                    // reason a document is rejected here. This check exists to tell JSON from
+                    // prose; enforcing a depth policy is the caller's serializer's job, and a
+                    // valid-but-deep document must not be silently discarded in favour of some
+                    // shallower fragment found earlier in the text.
+                    MaxDepth = 1024,
+                });
+
+            return true;
+        }
+        catch (System.Text.Json.JsonException)
+        {
+            return false;
+        }
     }
 
     /// <summary>
