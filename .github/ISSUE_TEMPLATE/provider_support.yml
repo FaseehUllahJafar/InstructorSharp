@@ -1,0 +1,35 @@
+name: Provider not shaped correctly
+description: A provider gets the wrong extraction mode, or needs a new one.
+labels: [provider]
+body:
+  - type: input
+    id: provider
+    attributes:
+      label: Provider
+      description: The ProviderName its IChatClient reports, if you know it.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: mode
+    attributes:
+      label: Mode currently selected
+      options: [JsonSchema, ToolCall, Json, MarkdownJson, "not sure"]
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What it should do instead, and why
+      description: >
+        A link to the provider's structured-output documentation is worth more than anything
+        else you can include here.
+    validations:
+      required: true
+
+  - type: markdown
+    attributes:
+      value: >
+        You do not have to wait for a release to fix this. ExtractionStrategy is public: implement
+        it and register it with AddStrategy. See the provider section of the README.

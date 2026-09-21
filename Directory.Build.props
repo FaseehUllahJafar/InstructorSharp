@@ -17,8 +17,8 @@
     <Product>InstructorSharp</Product>
     <Copyright>Copyright (c) 2026 Faseeh Ullah Jafar</Copyright>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
-    <PackageProjectUrl>https://github.com/faseehjafar/InstructorSharp</PackageProjectUrl>
-    <RepositoryUrl>https://github.com/faseehjafar/InstructorSharp</RepositoryUrl>
+    <PackageProjectUrl>https://github.com/FaseehUllahJafar/InstructorSharp</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/FaseehUllahJafar/InstructorSharp</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <PackageTags>llm;openai;anthropic;structured-output;json-schema;ai;instructor;extraction;validation</PackageTags>

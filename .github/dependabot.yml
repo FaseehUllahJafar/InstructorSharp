@@ -1,0 +1,18 @@
+version: 2
+updates:
+  # The library pins exact dependency versions, so a security fix upstream is invisible
+  # until something tells us about it.
+  - package-ecosystem: nuget
+    directory: "/"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      microsoft-extensions:
+        patterns:
+          - "Microsoft.Extensions.*"
+
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: monthly

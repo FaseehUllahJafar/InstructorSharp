@@ -1,0 +1,22 @@
+# Normalise line endings in the repository so that a file committed on Windows and
+# checked out on the Linux and macOS CI runners is byte-identical. Without this the
+# working tree and the index disagree on every text file.
+* text=auto eol=lf
+
+# Windows-only scripts must keep CRLF or cmd.exe mis-parses them.
+*.cmd   text eol=crlf
+*.bat   text eol=crlf
+*.ps1   text eol=crlf
+
+# Never touch these.
+*.png   binary
+*.jpg   binary
+*.gif   binary
+*.ico   binary
+*.snk   binary
+*.nupkg binary
+*.snupkg binary
+
+# Keep generated diffs out of review noise.
+*.sln    text eol=crlf merge=union
+*.slnx   text eol=lf

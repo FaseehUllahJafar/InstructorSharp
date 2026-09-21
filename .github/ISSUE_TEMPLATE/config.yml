@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Question about usage
+    url: https://github.com/FaseehUllahJafar/InstructorSharp/discussions
+    about: Ask here rather than opening an issue.

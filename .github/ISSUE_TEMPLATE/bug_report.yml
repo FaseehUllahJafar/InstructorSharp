@@ -1,0 +1,53 @@
+name: Bug report
+description: Something extracted incorrectly, threw, or behaved unexpectedly.
+labels: [bug]
+body:
+  - type: input
+    id: version
+    attributes:
+      label: InstructorSharp version
+      placeholder: "0.1.0"
+    validations:
+      required: true
+
+  - type: input
+    id: provider
+    attributes:
+      label: Provider and model
+      placeholder: "OpenAI gpt-4o-mini / Anthropic claude-sonnet-4.5 / Ollama llama3"
+    validations:
+      required: true
+
+  - type: input
+    id: tfm
+    attributes:
+      label: Target framework
+      placeholder: "net8.0 / net10.0 / net472"
+    validations:
+      required: true
+
+  - type: textarea
+    id: type
+    attributes:
+      label: The type you were extracting
+      render: csharp
+    validations:
+      required: true
+
+  - type: textarea
+    id: raw
+    attributes:
+      label: What the model actually returned
+      description: >
+        The most useful thing you can paste. TryExtractAsync returns this without throwing:
+        result.Attempts[0].RawResponse. ExtractionFailedException.Attempts carries the same.
+      render: text
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected instead
+    validations:
+      required: true

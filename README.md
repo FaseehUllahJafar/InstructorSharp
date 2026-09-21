@@ -2,7 +2,7 @@
 
 **Validated, strongly-typed objects out of any LLM — with automatic repair when the model gets it wrong.**
 
-[![CI](https://github.com/faseehjafar/InstructorSharp/actions/workflows/ci.yml/badge.svg)](https://github.com/faseehjafar/InstructorSharp/actions/workflows/ci.yml)
+[![CI](https://github.com/FaseehUllahJafar/InstructorSharp/actions/workflows/ci.yml/badge.svg)](https://github.com/FaseehUllahJafar/InstructorSharp/actions/workflows/ci.yml)
 [![NuGet](https://img.shields.io/nuget/v/InstructorSharp.svg)](https://www.nuget.org/packages/InstructorSharp)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
