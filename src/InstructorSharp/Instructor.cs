@@ -40,9 +40,13 @@ public sealed class Instructor : IInstructor
         IReadOnlyList<object>? validators)
     {
         _client = client ?? throw new ArgumentNullException(nameof(client));
-        _defaults = options ?? new InstructorOptions();
-        _validators = validators ?? Array.Empty<object>();
-        _strategies = strategies ?? DefaultStrategies;
+
+        // Copied, not referenced. The caller keeps their options object and may well mutate it
+        // later; this instructor is documented as a thread-safe singleton and must not change
+        // behaviour underneath an in-flight extraction.
+        _defaults = (options ?? new InstructorOptions()).Clone();
+        _validators = validators is null ? Array.Empty<object>() : [.. validators];
+        _strategies = strategies is null ? DefaultStrategies : [.. strategies];
     }
 
     internal static IReadOnlyList<ExtractionStrategy> DefaultStrategies { get; } =
@@ -87,14 +91,24 @@ public sealed class Instructor : IInstructor
 
         using Activity? activity = InstructorDiagnostics.StartExtraction(typeof(T), strategy.Mode);
 
+        try
+        {
         for (int attemptNumber = 1; attemptNumber <= effective.MaxAttempts; attemptNumber++)
         {
             cancellationToken.ThrowIfCancellationRequested();
 
             if (effective.TokenBudget is { } budget && tokensSpent >= budget)
             {
+                // Returned rather than thrown: exhausting the budget is an ordinary outcome of a
+                // repair loop, and TryExtractAsync promises not to throw for those. ExtractAsync
+                // turns it into TokenBudgetExceededException via ValueOrThrow.
+                attempts.Add(new ExtractionAttempt(
+                    attemptNumber, strategy.Mode, rawResponse: null,
+                    [new ValidationFailure("$", $"token budget of {budget} exhausted after {tokensSpent} tokens")],
+                    new TokenBudgetExceededException(tokensSpent, budget), 0, 0));
+
                 InstructorDiagnostics.RecordOutcome(activity, succeeded: false, attempts.Count);
-                throw new TokenBudgetExceededException(tokensSpent, budget);
+                return new ExtractionResult<T>(default, succeeded: false, attempts);
             }
 
             ChatOptions chatOptions = BuildChatOptions(effective);
@@ -123,14 +137,12 @@ public sealed class Instructor : IInstructor
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
-                // A transport failure is not something the model can repair, so it ends the
-                // attempt loop rather than burning the remaining budget on a dead endpoint.
-                attempts.Add(new ExtractionAttempt(
-                    attemptNumber, strategy.Mode, rawResponse: null,
-                    Array.Empty<ValidationFailure>(), ex, 0, 0));
-
+                // A transport failure is not a failed extraction. Reporting a 401 as "the model
+                // produced no valid object" hides the real cause behind a misleading message, so
+                // it propagates untouched -- from TryExtractAsync too, whose non-throwing promise
+                // covers what the model said, not whether the endpoint was reachable.
                 InstructorDiagnostics.RecordOutcome(activity, succeeded: false, attempts.Count);
-                return new ExtractionResult<T>(default, succeeded: false, attempts);
+                throw;
             }
 
             long inputTokens = response.Usage?.InputTokenCount ?? 0;
@@ -162,6 +174,13 @@ public sealed class Instructor : IInstructor
 
         InstructorDiagnostics.RecordOutcome(activity, succeeded: false, attempts.Count);
         return new ExtractionResult<T>(default, succeeded: false, attempts);
+        }
+        catch (OperationCanceledException)
+        {
+            // Cancelled work must not leave the span Unset, or an APM renders it as a success.
+            InstructorDiagnostics.RecordCancelled(activity, attempts.Count);
+            throw;
+        }
     }
 
     /// <inheritdoc />
@@ -187,7 +206,7 @@ public sealed class Instructor : IInstructor
             attemptMessages, chatOptions, schema.Schema, schema.SchemaText,
             effective.SchemaName ?? SanitizeSchemaName(typeof(T).Name), typeof(T)));
 
-        var buffer = new StreamingJsonBuffer();
+        var buffer = new StreamingJsonBuffer(effective.MaxStreamBytes);
         string lastEmitted = string.Empty;
 
         await foreach (ChatResponseUpdate update in
@@ -300,17 +319,22 @@ public sealed class Instructor : IInstructor
     {
         ExtractionStrategy selected = SelectStrategy(mode);
 
-        if (mode != ExtractionMode.Auto || selected.Mode != ExtractionMode.ToolCall)
+        if (selected.SupportsStreaming)
         {
             return selected;
         }
+
+        // Reached when a caller explicitly sets Mode = ToolCall and then streams. Honouring it
+        // would set a forced tool on the request and then read only update.Text, which is empty
+        // for tool-call updates -- the stream would collect nothing and fail with "no JSON
+        // document". Falling back is the only behaviour that produces a correct result.
 
         var metadata = _client.GetService(typeof(ChatClientMetadata)) as ChatClientMetadata;
 
         ExtractionStrategy? best = null;
         foreach (ExtractionStrategy candidate in _strategies)
         {
-            if (candidate.Mode == ExtractionMode.ToolCall)
+            if (!candidate.SupportsStreaming)
             {
                 continue;
             }
@@ -408,7 +432,9 @@ public sealed class Instructor : IInstructor
             ? wrapped
             : document.RootElement;
 
-        return JsonSerializer.Deserialize(inner.GetRawText(), typeInfo)!;
+        // Deserializing the element directly avoids re-serializing it to a string and parsing
+        // that string again, which on the streaming path happened once per arriving chunk.
+        return inner.Deserialize(typeInfo)!;
     }
 
     private async ValueTask<IReadOnlyList<ValidationFailure>> ValidateAsync<T>(
@@ -423,16 +449,8 @@ public sealed class Instructor : IInstructor
             failures.AddRange(RunDataAnnotations(value, options));
         }
 
-        foreach (object candidate in _validators)
-        {
-            if (candidate is IInstructorValidator<T> validator)
-            {
-                IReadOnlyList<ValidationFailure> custom =
-                    await validator.ValidateAsync(value, cancellationToken).ConfigureAwait(false);
-
-                failures.AddRange(custom);
-            }
-        }
+        await RunValidatorsAsync(_validators, value, failures, cancellationToken).ConfigureAwait(false);
+        await RunValidatorsAsync(options.Validators, value, failures, cancellationToken).ConfigureAwait(false);
 
         return failures;
     }
@@ -454,6 +472,27 @@ public sealed class Instructor : IInstructor
     {
         var validator = new DataAnnotationsValidator(options.SerializerOptions, options.MaxValidationDepth);
         return validator.Validate(value);
+    }
+
+    private static async ValueTask RunValidatorsAsync<T>(
+        IEnumerable<object> validators,
+        T value,
+        List<ValidationFailure> failures,
+        CancellationToken cancellationToken)
+    {
+        foreach (object candidate in validators)
+        {
+            if (candidate is IInstructorValidator<T> validator)
+            {
+                IReadOnlyList<ValidationFailure> custom =
+                    await validator.ValidateAsync(value, cancellationToken).ConfigureAwait(false);
+
+                if (custom is { Count: > 0 })
+                {
+                    failures.AddRange(custom);
+                }
+            }
+        }
     }
 
     private static void AppendRepairTurn<T>(List<ChatMessage> conversation, string? payload, AttemptOutcome<T> outcome)
@@ -479,20 +518,35 @@ public sealed class Instructor : IInstructor
 
     private ExtractionStrategy SelectStrategy(ExtractionMode mode)
     {
+        var metadata = _client.GetService(typeof(ChatClientMetadata)) as ChatClientMetadata;
+
         if (mode != ExtractionMode.Auto)
         {
+            // Among the strategies for the requested mode, prefer one that says it can serve this
+            // provider. A custom strategy registered for a mode should not intercept a provider
+            // it was never written for just because it sits earlier in the list.
+            ExtractionStrategy? capable = null;
+            ExtractionStrategy? anyOfMode = null;
+
             foreach (ExtractionStrategy strategy in _strategies)
             {
-                if (strategy.Mode == mode)
+                if (strategy.Mode != mode)
                 {
-                    return strategy;
+                    continue;
+                }
+
+                anyOfMode ??= strategy;
+
+                if (strategy.CanHandle(metadata) && (capable is null || strategy.Priority > capable.Priority))
+                {
+                    capable = strategy;
                 }
             }
 
-            throw new InstructorException($"No strategy is registered for mode {mode}.");
+            return capable
+                ?? anyOfMode
+                ?? throw new InstructorException($"No strategy is registered for mode {mode}.");
         }
-
-        var metadata = _client.GetService(typeof(ChatClientMetadata)) as ChatClientMetadata;
 
         ExtractionStrategy? best = null;
         foreach (ExtractionStrategy strategy in _strategies)

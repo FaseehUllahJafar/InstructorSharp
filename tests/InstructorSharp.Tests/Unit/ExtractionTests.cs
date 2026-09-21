@@ -1,3 +1,4 @@
+using System.Net.Http;
 using InstructorSharp.Tests.Fakes;
 using Microsoft.Extensions.AI;
 using Xunit;
@@ -135,18 +136,20 @@ public class ExtractionTests
     }
 
     [Fact]
-    public async Task A_transport_failure_stops_the_loop_rather_than_burning_the_budget()
+    public async Task A_transport_failure_propagates_rather_than_looking_like_a_bad_answer()
     {
+        // Reporting a 401 or a DNS failure as "the model produced no valid object" buries the
+        // real cause. TryExtractAsync's non-throwing promise covers what the model said, not
+        // whether the endpoint was reachable.
         var client = new FakeChatClient()
             .Throws(new HttpRequestException("503 from upstream"))
             .RespondWith("""{"name":"Ali","age":29}""");
 
-        ExtractionResult<UserInfo> result =
-            await client.AsInstructor().TryExtractAsync<UserInfo>("who is Ali");
+        HttpRequestException ex = await Assert.ThrowsAsync<HttpRequestException>(
+            () => client.AsInstructor().TryExtractAsync<UserInfo>("who is Ali"));
 
-        Assert.False(result.Succeeded);
+        Assert.Contains("503", ex.Message, StringComparison.Ordinal);
         Assert.Equal(1, client.CallCount);
-        Assert.IsType<HttpRequestException>(result.Attempts[0].Exception);
     }
 
     [Fact]
@@ -178,6 +181,47 @@ public class ExtractionTests
 
         Assert.Equal(1_000, ex.Budget);
         Assert.Equal(1, client.CallCount);
+    }
+
+    [Fact]
+    public async Task TryExtract_reports_budget_exhaustion_without_throwing()
+    {
+        // The whole point of the Try variant is that the caller need not wrap it in try/catch.
+        var client = new FakeChatClient()
+            .RespondWith("""{"name":"Ali","age":500}""", inputTokens: 900, outputTokens: 200)
+            .RespondWith("""{"name":"Ali","age":500}""", inputTokens: 900, outputTokens: 200);
+
+        var options = new InstructorOptions { MaxAttempts = 5, TokenBudget = 1_000 };
+
+        ExtractionResult<UserInfo> result =
+            await client.AsInstructor(options).TryExtractAsync<UserInfo>("how old is Ali");
+
+        Assert.False(result.Succeeded);
+        Assert.Contains(result.Failures, f => f.Message.Contains("budget", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public async Task A_per_call_validator_is_applied()
+    {
+        var client = new FakeChatClient()
+            .RespondWith("""{"name":"Ali","age":29}""")
+            .RespondWith("""{"name":"Ali","age":29}""");
+
+        var options = new InstructorOptions { MaxAttempts = 2 };
+        options.Validators.Add(new AlwaysRejects());
+
+        await Assert.ThrowsAsync<ExtractionFailedException>(
+            () => client.AsInstructor().ExtractAsync<UserInfo>("who is Ali", options));
+
+        Assert.Equal(2, client.CallCount);
+    }
+
+    private sealed class AlwaysRejects : Validation.IInstructorValidator<UserInfo>
+    {
+        public ValueTask<IReadOnlyList<ValidationFailure>> ValidateAsync(
+            UserInfo value,
+            CancellationToken cancellationToken = default) =>
+            new([new ValidationFailure("$.name", "never acceptable")]);
     }
 
     [Fact]
@@ -333,7 +377,7 @@ public class ExtractionTests
     {
         var client = new FakeChatClient().RespondWith("""{"name":"Ali","age":29}""");
         using var cts = new CancellationTokenSource();
-        await cts.CancelAsync();
+        cts.Cancel();
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(
             () => client.AsInstructor().ExtractAsync<UserInfo>("who is Ali", cancellationToken: cts.Token));

@@ -107,7 +107,7 @@ internal sealed class FakeChatClient : IChatClient
     internal sealed record RecordedCall(List<ChatMessage> Messages, ChatOptions? Options)
     {
         /// <summary>The text of the last message sent, which is the repair prompt on a retry.</summary>
-        internal string LastMessageText => Messages.Count == 0 ? string.Empty : Messages[^1].Text;
+        internal string LastMessageText => Messages.Count == 0 ? string.Empty : Messages[Messages.Count - 1].Text;
 
         /// <summary>All message text concatenated, for coarse assertions.</summary>
         internal string AllText => string.Join("\n", Messages.Select(m => m.Text));

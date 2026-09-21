@@ -53,8 +53,15 @@ public class SchemaGeneratorTests
         Assert.False(age.TryGetProperty("maximum", out _));
 
         string description = age.GetProperty("description").GetString()!;
-        Assert.Contains("minimum", description, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("maximum", description, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("130", description, StringComparison.Ordinal);
+
+        // The lower bound is asserted only where the framework actually emits it. On
+        // netstandard2.0 the schema exporter drops "minimum" whenever it is <= 0, so on .NET
+        // Framework this description reads "(maximum: 130)". See KnownFrameworkDifferences.
+#if !NETFRAMEWORK
+        Assert.Contains("minimum", description, StringComparison.OrdinalIgnoreCase);
+#endif
     }
 
     [Fact]
@@ -62,7 +69,12 @@ public class SchemaGeneratorTests
     {
         SchemaDescriptor descriptor = SchemaGenerator.For(typeof(UserInfo), Loose);
         JsonElement age = descriptor.Schema.GetProperty("properties").GetProperty("age");
+
+        // Upper bound is emitted on every target; see the comment above for the lower bound.
+        Assert.True(age.TryGetProperty("maximum", out _));
+#if !NETFRAMEWORK
         Assert.True(age.TryGetProperty("minimum", out _));
+#endif
     }
 
     [Fact]

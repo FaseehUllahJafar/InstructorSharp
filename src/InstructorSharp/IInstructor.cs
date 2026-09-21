@@ -29,9 +29,16 @@ public interface IInstructor
         CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Extracts a <typeparamref name="T"/> without throwing, returning the outcome and the full
-    /// attempt history either way.
+    /// Extracts a <typeparamref name="T"/> without throwing for anything the model did, returning
+    /// the outcome and the full attempt history either way.
     /// </summary>
+    /// <remarks>
+    /// A bad answer, an unparseable answer, an exhausted attempt count and an exhausted token
+    /// budget are all returned as an unsuccessful result. What still propagates is everything
+    /// that is not the model's doing: a transport fault from the underlying client, cancellation,
+    /// and configuration errors such as a missing JSON contract. Reporting a 401 as "no valid
+    /// object was produced" would hide the real cause.
+    /// </remarks>
     /// <typeparam name="T">The type to extract.</typeparam>
     /// <param name="messages">The conversation to send.</param>
     /// <param name="options">Per-call overrides, or null to use the configured defaults.</param>

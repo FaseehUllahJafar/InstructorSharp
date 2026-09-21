@@ -13,6 +13,9 @@ namespace InstructorSharp.Parsing;
 /// </remarks>
 internal static class JsonExtractor
 {
+    /// <summary>How many opening brackets are tried before giving up. See <see cref="TryScan"/>.</summary>
+    private const int MaxCandidateStarts = 64;
+
     /// <summary>
     /// Finds the outermost JSON object or array in <paramref name="text"/>.
     /// </summary>
@@ -96,6 +99,7 @@ internal static class JsonExtractor
     private static bool TryScan(string text, out string json)
     {
         json = string.Empty;
+        int candidates = 0;
 
         for (int start = 0; start < text.Length; start++)
         {
@@ -103,6 +107,16 @@ internal static class JsonExtractor
             if (c is not ('{' or '['))
             {
                 continue;
+            }
+
+            // Each failed candidate scans to the end of the text, so an unbounded search is
+            // quadratic. Truncated nested output -- {"a":{"a":{"a": ... with no closers, which is
+            // what a model hitting its output cap mid-recursion produces -- is exactly the worst
+            // case, and would pin a core for minutes on a megabyte of it. The real document is
+            // never the sixty-fifth opening bracket in a response.
+            if (++candidates > MaxCandidateStarts)
+            {
+                return false;
             }
 
             if (!TryMatchFrom(text, start, out int end))
@@ -164,6 +178,36 @@ internal static class JsonExtractor
         for (int i = start; i < text.Length; i++)
         {
             char c = text[i];
+
+            // Comments are skipped because the deserializer is configured to accept them. A brace
+            // inside "// note: use {braces} here" would otherwise unbalance the scan and cause a
+            // perfectly good response to be rejected.
+            if (!inString && c == '/' && i + 1 < text.Length)
+            {
+                if (text[i + 1] == '/')
+                {
+                    int newline = text.IndexOf('\n', i + 2);
+                    if (newline < 0)
+                    {
+                        return false;
+                    }
+
+                    i = newline;
+                    continue;
+                }
+
+                if (text[i + 1] == '*')
+                {
+                    int close = text.IndexOf("*/", i + 2, StringComparison.Ordinal);
+                    if (close < 0)
+                    {
+                        return false;
+                    }
+
+                    i = close + 1;
+                    continue;
+                }
+            }
 
             if (inString)
             {

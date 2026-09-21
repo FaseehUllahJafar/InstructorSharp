@@ -123,8 +123,13 @@ public sealed class InstructorBuilder
 
     /// <summary>Builds the instructor.</summary>
     /// <returns>A configured <see cref="IInstructor"/>.</returns>
+    /// <remarks>
+    /// Copies are taken, so a builder that is kept and mutated afterwards cannot alter an
+    /// instructor that has already been built -- which would otherwise throw
+    /// "collection was modified" from inside an unrelated in-flight request.
+    /// </remarks>
     public IInstructor Build() =>
-        new Instructor(_client, _options, _strategies, _validators);
+        new Instructor(_client, _options, _strategies?.ToArray(), _validators.ToArray());
 
     private sealed class DelegateValidator<T> : IInstructorValidator<T>
     {

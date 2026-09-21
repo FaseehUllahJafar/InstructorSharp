@@ -36,8 +36,26 @@ jobs:
       - name: Build
         run: dotnet build --no-restore --configuration Release -warnaserror
 
+      # TRX per target framework, so the .NET Framework leg's result is observable rather than
+      # assumed. Checking only that the exe exists would pass even if no test in it ever ran.
       - name: Test
-        run: dotnet test --no-build --configuration Release
+        run: dotnet test --no-build --configuration Release -- --report-trx
+
+      - name: Assert the .NET Framework leg actually executed
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          trx=$(find tests -path '*net472*' -name '*.trx' | head -n 1)
+          if [ -z "$trx" ]; then
+            echo "::error::No net472 test results. The .NET Framework claim is unverified."
+            exit 1
+          fi
+          executed=$(grep -o 'executed="[0-9]*"' "$trx" | head -n 1 | grep -o '[0-9]*')
+          echo "net472 executed ${executed:-0} tests"
+          if [ "${executed:-0}" -lt 1 ]; then
+            echo "::error::net472 ran zero tests."
+            exit 1
+          fi
 
   pack:
     name: Pack

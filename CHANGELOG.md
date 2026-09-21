@@ -6,6 +6,35 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- `net472` leg in the test suite and in CI, so the .NET Standard 2.0 asset is executed on .NET
+  Framework rather than merely compiled for it.
+- `InstructorOptions.MaxStreamBytes` bounds a streamed response; `InstructorOptions.Validators`
+  adds rules for a single call.
+- `ExtractionStrategy.SupportsStreaming`, so a custom strategy can declare whether it can serve
+  a streamed call.
+
+### Changed
+
+- `TryExtractAsync` no longer throws when the token budget is exhausted; it returns an
+  unsuccessful result. `ExtractAsync` still raises `TokenBudgetExceededException`.
+- Transport faults from the underlying client propagate instead of being reported as a failed
+  extraction, so a 401 no longer reads as "the model produced no valid object".
+- Streaming refuses tool-call mode even when it is requested explicitly, rather than collecting
+  nothing and failing.
+- `ExtractionResult<T>`, `ExtractionAttempt` and both exceptions are constructible, so
+  `IInstructor` can be implemented outside this assembly.
+
+### Fixed
+
+- The streaming buffer could overflow its capacity calculation past 2 GiB and spin forever.
+- The JSON scanner was quadratic on truncated nested output and ignored comments the
+  deserializer accepts.
+- An explicit extraction mode ignored whether the strategy could serve the provider.
+- Options and validator collections are copied on construction, so mutating a builder afterwards
+  cannot disturb an instructor already in use.
+
 ## [0.1.0] - 2026-09-14
 
 First release. The API may still move before 1.0.0.

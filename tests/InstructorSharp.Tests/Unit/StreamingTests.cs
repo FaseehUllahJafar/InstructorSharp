@@ -24,7 +24,7 @@ public class StreamingTests
             snapshots.Select(s => s.Name).Distinct().Count() > 1,
             "expected the name to fill in over successive snapshots");
 
-        UserInfo final = snapshots[^1];
+        UserInfo final = snapshots[snapshots.Count - 1];
         Assert.Equal("Faseeh Ullah Jafar", final.Name);
         Assert.Equal(29, final.Age);
         Assert.Equal("Lahore", final.City);

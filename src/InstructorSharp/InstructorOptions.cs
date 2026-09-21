@@ -10,6 +10,8 @@ namespace InstructorSharp;
 public sealed class InstructorOptions
 {
     private int _maxAttempts = 3;
+    private int _maxValidationDepth = 32;
+    private int _maxStreamBytes = 8 * 1024 * 1024;
 
     /// <summary>
     /// How many times to ask the model in total, including the first try. A value of 1 disables
@@ -44,9 +46,15 @@ public sealed class InstructorOptions
     public JsonSerializerOptions SerializerOptions { get; set; } = InstructorJson.Default;
 
     /// <summary>
-    /// Ceiling on total tokens (prompt plus completion) across all attempts of a single
-    /// extraction. Null means no ceiling. This is the guard against a repair loop quietly
-    /// costing ten times what the first call did.
+    /// Stops further attempts once total tokens (prompt plus completion) across this extraction
+    /// have passed the given figure. Null means no limit. This is the guard against a repair loop
+    /// quietly costing ten times what the first call did.
+    /// <para>
+    /// It is a gate, not a truncation: the check runs before each attempt, so a single very long
+    /// reply can overshoot. It applies to <see cref="IInstructor.ExtractAsync{T}"/> and
+    /// <see cref="IInstructor.TryExtractAsync{T}"/> only -- a streamed call reports no usage until
+    /// it ends, so streaming is bounded by <see cref="MaxStreamBytes"/> instead.
+    /// </para>
     /// </summary>
     public long? TokenBudget { get; set; }
 
@@ -67,7 +75,47 @@ public sealed class InstructorOptions
     /// Maximum depth the recursive validator will walk before giving up on a branch.
     /// Guards against pathological object graphs. Defaults to 32.
     /// </summary>
-    public int MaxValidationDepth { get; set; } = 32;
+    public int MaxValidationDepth
+    {
+        get => _maxValidationDepth;
+        set
+        {
+            // A zero or negative depth would silently switch validation off, which is the one
+            // failure this library exists to prevent. It must be an error, not a quiet no-op.
+            if (value < 1)
+            {
+                throw new ArgumentOutOfRangeException(nameof(value), value, "MaxValidationDepth must be at least 1.");
+            }
+
+            _maxValidationDepth = value;
+        }
+    }
+
+    /// <summary>
+    /// Ceiling on the bytes a single streamed response may accumulate before it is abandoned.
+    /// Defaults to 8 MiB. A model that falls into a repetition loop streams without end, and the
+    /// caller's cancellation token cannot help because the growth happens between yields.
+    /// </summary>
+    public int MaxStreamBytes
+    {
+        get => _maxStreamBytes;
+        set
+        {
+            if (value < 1024)
+            {
+                throw new ArgumentOutOfRangeException(nameof(value), value, "MaxStreamBytes must be at least 1024.");
+            }
+
+            _maxStreamBytes = value;
+        }
+    }
+
+    /// <summary>
+    /// Extra rules applied to this call only, on top of any registered on the builder. Each entry
+    /// must implement <see cref="Validation.IInstructorValidator{T}"/> for the type being extracted;
+    /// entries for other types are ignored.
+    /// </summary>
+    public IList<object> Validators { get; } = [];
 
     /// <summary>
     /// Name given to the generated schema when the provider wants one. Defaults to the
@@ -83,19 +131,31 @@ public sealed class InstructorOptions
     public ChatOptions? ChatOptions { get; set; }
 
     /// <summary>
-    /// Creates a shallow copy. Used internally so per-call overrides never mutate shared options.
+    /// Creates a copy, so that options handed to an instructor are insulated from later mutation
+    /// of the caller's instance.
     /// </summary>
     /// <returns>A copy of these options.</returns>
-    public InstructorOptions Clone() => new()
+    internal InstructorOptions Clone()
     {
-        MaxAttempts = MaxAttempts,
-        Mode = Mode,
-        SerializerOptions = SerializerOptions,
-        TokenBudget = TokenBudget,
-        UseStrictSchema = UseStrictSchema,
-        ValidateDataAnnotations = ValidateDataAnnotations,
-        MaxValidationDepth = MaxValidationDepth,
-        SchemaName = SchemaName,
-        ChatOptions = ChatOptions?.Clone(),
-    };
+        var copy = new InstructorOptions
+        {
+            MaxAttempts = MaxAttempts,
+            Mode = Mode,
+            SerializerOptions = SerializerOptions,
+            TokenBudget = TokenBudget,
+            UseStrictSchema = UseStrictSchema,
+            ValidateDataAnnotations = ValidateDataAnnotations,
+            MaxValidationDepth = MaxValidationDepth,
+            MaxStreamBytes = MaxStreamBytes,
+            SchemaName = SchemaName,
+            ChatOptions = ChatOptions?.Clone(),
+        };
+
+        foreach (object validator in Validators)
+        {
+            copy.Validators.Add(validator);
+        }
+
+        return copy;
+    }
 }

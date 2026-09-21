@@ -45,6 +45,20 @@ public static class InstructorDiagnostics
         return activity;
     }
 
+    internal static void RecordCancelled(Activity? activity, int attempts)
+    {
+        if (activity is { IsAllDataRequested: true })
+        {
+            activity.SetTag("instructorsharp.attempts", attempts);
+            activity.SetTag("instructorsharp.succeeded", false);
+            activity.SetStatus(ActivityStatusCode.Error, "cancelled");
+        }
+
+        var outcome = new KeyValuePair<string, object?>("outcome", "cancelled");
+        Extractions.Add(1, outcome);
+        AttemptsPerExtraction.Record(attempts, outcome);
+    }
+
     internal static void RecordOutcome(Activity? activity, bool succeeded, int attempts)
     {
         if (activity is { IsAllDataRequested: true })

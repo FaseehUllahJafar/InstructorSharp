@@ -7,11 +7,16 @@ namespace InstructorSharp;
 /// <typeparam name="T">The type that was being extracted.</typeparam>
 public sealed class ExtractionResult<T>
 {
-    internal ExtractionResult(T? value, bool succeeded, IReadOnlyList<ExtractionAttempt> attempts)
+    /// <summary>Creates a result. Public so that <see cref="IInstructor"/> can be implemented
+    /// outside this assembly -- a test fake, an in-memory stub, or a decorator.</summary>
+    /// <param name="value">The extracted value, when successful.</param>
+    /// <param name="succeeded">Whether a valid value was produced.</param>
+    /// <param name="attempts">Every attempt made, in order.</param>
+    public ExtractionResult(T? value, bool succeeded, IReadOnlyList<ExtractionAttempt> attempts)
     {
         Value = value;
         Succeeded = succeeded;
-        Attempts = attempts;
+        Attempts = attempts ?? Array.Empty<ExtractionAttempt>();
     }
 
     /// <summary>The extracted, validated value. Meaningful only when <see cref="Succeeded"/> is true.</summary>
@@ -64,11 +69,19 @@ public sealed class ExtractionResult<T>
     /// <returns>The extracted value.</returns>
     public T ValueOrThrow()
     {
-        if (!Succeeded)
+        if (Succeeded)
         {
-            throw new ExtractionFailedException(typeof(T), Attempts);
+            return Value!;
         }
 
-        return Value!;
+        // A budget exhaustion is reported through its own exception type so a caller can catch
+        // just that and, say, fall back to a cheaper model.
+        if (Attempts.Count > 0 &&
+            Attempts[Attempts.Count - 1].Exception is TokenBudgetExceededException budget)
+        {
+            throw budget;
+        }
+
+        throw new ExtractionFailedException(typeof(T), Attempts);
     }
 }

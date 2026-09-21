@@ -70,7 +70,14 @@ internal static class SchemaGenerator
 
         // Volatile.Read of a plain counter rather than ConcurrentDictionary.Count, which takes
         // every bucket lock and would turn each cache miss into a contention point.
-        if (Volatile.Read(ref _cacheCount) < MaxCachedSchemas)
+        // Clearing rather than freezing: a cache that stops accepting entries once full makes
+        // every later extraction pay full schema generation for the life of the process.
+        if (Volatile.Read(ref _cacheCount) >= MaxCachedSchemas)
+        {
+            Cache.Clear();
+            Interlocked.Exchange(ref _cacheCount, 0);
+        }
+
         {
             // Racing callers may both build; whichever lands first wins and the other is
             // discarded. Schemas are immutable, so that costs a little work and nothing else.

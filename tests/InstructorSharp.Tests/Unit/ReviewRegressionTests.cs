@@ -99,7 +99,7 @@ public class ReviewRegressionTests
 
         int split = full.IndexOf(Emoji, StringComparison.Ordinal) + 1;   // between the surrogates
 
-        var buffer = new StreamingJsonBuffer();
+        var buffer = new StreamingJsonBuffer(8 * 1024 * 1024);
         buffer.Append(full.Substring(0, split));
         buffer.Append(full.Substring(split));
 
@@ -162,7 +162,7 @@ public class ReviewRegressionTests
         }
 
         Assert.Null(client.Calls[0].Options!.Tools);
-        Assert.Equal("Ali", seen[^1].Name);
+        Assert.Equal("Ali", seen[seen.Count - 1].Name);
     }
 
     [Fact]
@@ -185,7 +185,7 @@ public class ReviewRegressionTests
 
         for (int split = 1; split < Text.Length; split++)
         {
-            var buffer = new StreamingJsonBuffer();
+            var buffer = new StreamingJsonBuffer(8 * 1024 * 1024);
             buffer.Append(Text.Substring(0, split));
             buffer.Append(Text.Substring(split));
 

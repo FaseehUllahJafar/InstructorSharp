@@ -66,8 +66,8 @@ Then bring your own model. InstructorSharp depends on **no provider SDK** — it
 
 ```bash
 # pick whichever you already have
-dotnet add package Microsoft.Extensions.AI.OpenAI
-dotnet add package Microsoft.Extensions.AI.Ollama
+dotnet add package Microsoft.Extensions.AI.OpenAI     # OpenAI, Azure OpenAI, and OpenAI-compatible endpoints
+dotnet add package OllamaSharp                        # Ollama
 ```
 
 **Targets:** .NET 10, .NET 8, and **.NET Standard 2.0 — so it runs on .NET Framework 4.6.2+.**
@@ -185,9 +185,10 @@ Two deliberate details:
 - A partially-received **string** is shown as it arrives, but a partially-received **number** is
   withheld until provably complete. A half-written string reads as obviously mid-word; a
   half-written `123` looks exactly like a confident `1`.
-- Streaming never uses tool-call mode. Providers deliver partial tool arguments inconsistently,
-  so on a tool-calling provider such as Anthropic, `StreamAsync` drops to the strongest
-  text-producing mode instead of guessing. Non-streaming calls are unaffected.
+- Streaming never uses tool-call mode, even if you ask for it explicitly. Providers deliver
+  partial tool arguments inconsistently, so on a tool-calling provider such as Anthropic,
+  `StreamAsync` drops to the strongest text-producing mode instead of guessing. Non-streaming
+  calls are unaffected.
 
 There is no repair loop while streaming, by design: output a user has already seen cannot be
 silently retried. The final object is validated, and an invalid one throws.
@@ -204,6 +205,12 @@ var instructor = chatClient.AsInstructorBuilder()
     .WithTokenBudget(10_000)   // across all attempts of one extraction
     .Build();
 ```
+
+Two honest limits on that budget. It stops the *next* attempt once the spend so far has passed
+the ceiling; it cannot truncate a reply already in flight, so a single very long response can
+overshoot. And it applies to `ExtractAsync`/`TryExtractAsync` only — streaming is bounded by
+`MaxStreamBytes` (8 MiB by default) instead, because token usage is not known until the stream
+ends.
 
 Use `TryExtractAsync` when you would rather inspect the outcome than catch:
 
@@ -312,8 +319,11 @@ var options = new InstructorOptions
 };
 ```
 
-Express your rules as `IInstructorValidator<T>` instead, which is fully AOT-safe. The library
-tells you this at compile time rather than at runtime in production.
+Express your rules as `IInstructorValidator<T>` instead, which is fully AOT-safe.
+
+Be aware that the defaults are the reflective path: `ValidateDataAnnotations` is true and
+`SerializerOptions` is a reflection-based configuration. Those two lines are what switch it off;
+without them a trimmed or AOT-published app will fail at runtime, not at build time.
 
 ---
 

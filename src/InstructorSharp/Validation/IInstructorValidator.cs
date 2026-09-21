@@ -9,7 +9,12 @@ namespace InstructorSharp.Validation;
 /// <remarks>
 /// This is the seam for rules a schema cannot express: cross-field arithmetic, a value that
 /// must exist in your database, a total that must equal the sum of its lines. Register
-/// implementations on <see cref="InstructorBuilder"/> or pass them per call.
+/// implementations on <see cref="InstructorBuilder"/>, or per call through
+/// <see cref="InstructorOptions.Validators"/>.
+/// <para>
+/// A single instance is shared by every caller of the owning <see cref="IInstructor"/> and may be
+/// invoked concurrently. Implementations must be thread-safe and hold no per-call state.
+/// </para>
 /// </remarks>
 public interface IInstructorValidator<in T>
 {

@@ -93,14 +93,15 @@ public static class ServiceCollectionExtensions
 }
 
 /// <summary>
-/// Lets validators of differing generic arguments share one container registration.
+/// Lets validators of differing generic arguments share one container registration. Internal on
+/// purpose: it is DI plumbing, not something a consumer should implement.
 /// </summary>
 /// <remarks>
 /// <see cref="IInstructorValidator{T}"/> is generic and contravariant, so there is no single
 /// closed type the container can resolve them all by. This non-generic marker is the seam that
 /// makes <c>GetServices</c> able to return the whole set.
 /// </remarks>
-public interface IInstructorValidatorMarker
+internal interface IInstructorValidatorMarker
 {
     /// <summary>The wrapped <see cref="IInstructorValidator{T}"/> instance.</summary>
     object Validator { get; }

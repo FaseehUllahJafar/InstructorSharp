@@ -43,6 +43,14 @@
     <PackageReference Include="System.ComponentModel.Annotations" Version="5.0.0" />
   </ItemGroup>
 
+  <!--
+    These grants are compiled into the shipped assembly, which is unsigned, so anyone can name an
+    assembly "InstructorSharp.Tests" and reach the internals. That is accepted rather than worked
+    around: `internal` is not a security boundary on .NET, because private reflection already
+    reaches every member regardless of accessibility. Removing the grant would cost the test suite
+    its access to the parsers and the validator while giving an attacker nothing they did not
+    already have.
+  -->
   <ItemGroup>
     <InternalsVisibleTo Include="InstructorSharp.Tests" />
     <InternalsVisibleTo Include="InstructorSharp.FluentValidation" />

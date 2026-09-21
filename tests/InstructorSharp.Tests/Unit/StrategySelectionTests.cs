@@ -99,7 +99,7 @@ public class StrategySelectionTests
 
         await client.AsInstructor().ExtractAsync<UserInfo>("how old is Ali");
 
-        ChatMessage last = client.Calls[1].Messages[^1];
+        ChatMessage last = client.Calls[1].Messages[client.Calls[1].Messages.Count - 1];
         Assert.Equal(ChatRole.User, last.Role);
         Assert.Contains("$.age", last.Text, StringComparison.Ordinal);
     }

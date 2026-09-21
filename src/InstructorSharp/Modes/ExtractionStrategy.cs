@@ -13,6 +13,12 @@ namespace InstructorSharp.Modes;
 /// someone ships a release. Implementing this and registering it on
 /// <see cref="InstructorBuilder"/> lets you fix that in your own codebase the same afternoon,
 /// without waiting for us.
+/// <para>
+/// A single instance is shared by every caller of the owning <see cref="IInstructor"/> and may be
+/// invoked concurrently. Implementations must be thread-safe and must hold no per-call state.
+/// Only <c>virtual</c> members will be added to this type in future versions, so a subclass will
+/// not break on upgrade.
+/// </para>
 /// </remarks>
 public abstract class ExtractionStrategy
 {
@@ -25,6 +31,13 @@ public abstract class ExtractionStrategy
     /// for the universal prompted fallback.
     /// </summary>
     public abstract int Priority { get; }
+
+    /// <summary>
+    /// Whether this strategy's output arrives as streamed text, and so can serve
+    /// <see cref="IInstructor.StreamAsync{T}"/>. Defaults to true for every mode except tool
+    /// calling, whose partial arguments providers deliver inconsistently.
+    /// </summary>
+    public virtual bool SupportsStreaming => Mode != ExtractionMode.ToolCall;
 
     /// <summary>
     /// Whether this strategy can serve the given client, judged from its advertised metadata.
@@ -65,7 +78,14 @@ public abstract class ExtractionStrategy
 /// </summary>
 public sealed class StrategyContext
 {
-    internal StrategyContext(
+    /// <summary>Creates a context. Public so that custom strategies can be unit tested.</summary>
+    /// <param name="messages">The messages for this attempt.</param>
+    /// <param name="chatOptions">Options for the call.</param>
+    /// <param name="schema">The generated JSON schema.</param>
+    /// <param name="schemaText">The schema, serialized.</param>
+    /// <param name="schemaName">A provider-safe schema name.</param>
+    /// <param name="targetType">The CLR type being extracted.</param>
+    public StrategyContext(
         List<ChatMessage> messages,
         ChatOptions chatOptions,
         JsonElement schema,
@@ -85,7 +105,7 @@ public sealed class StrategyContext
     /// The messages for this one attempt. This is a fresh copy per attempt, so anything a
     /// strategy adds here is discarded before the next one.
     /// </summary>
-    public List<ChatMessage> Messages { get; }
+    public IList<ChatMessage> Messages { get; }
 
     /// <summary>
     /// Adds a system-level instruction, placing it with any system messages the caller already

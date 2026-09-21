@@ -121,7 +121,8 @@ public sealed class JsonModeStrategy : ExtractionStrategy
 {
     private static readonly string[] SupportedProviders =
     [
-        "ollama", "llamacpp", "llama.cpp", "lmstudio", "vllm", "deepseek", "openai", "azure", "mistral",
+        "ollama", "llamacpp", "llama.cpp", "lmstudio", "lm studio", "lm-studio",
+        "vllm", "deepseek", "openai", "azure", "mistral",
     ];
 
     /// <inheritdoc />

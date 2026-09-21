@@ -27,7 +27,10 @@ public class InstructorException : Exception
 /// </summary>
 public sealed class ExtractionFailedException : InstructorException
 {
-    internal ExtractionFailedException(Type targetType, IReadOnlyList<ExtractionAttempt> attempts)
+    /// <summary>Creates the exception.</summary>
+    /// <param name="targetType">The type that could not be extracted.</param>
+    /// <param name="attempts">Every attempt made, in order.</param>
+    public ExtractionFailedException(Type targetType, IReadOnlyList<ExtractionAttempt> attempts)
         : base(BuildMessage(targetType, attempts), attempts.Count > 0 ? attempts[attempts.Count - 1].Exception : null)
     {
         TargetType = targetType;
@@ -79,7 +82,10 @@ public sealed class ExtractionFailedException : InstructorException
 /// </summary>
 public sealed class TokenBudgetExceededException : InstructorException
 {
-    internal TokenBudgetExceededException(long spent, long budget)
+    /// <summary>Creates the exception.</summary>
+    /// <param name="spent">Tokens already consumed.</param>
+    /// <param name="budget">The configured budget.</param>
+    public TokenBudgetExceededException(long spent, long budget)
         : base($"Token budget exhausted: {spent} tokens used against a budget of {budget}. " +
                "Raise InstructorOptions.TokenBudget or lower MaxAttempts.")
     {

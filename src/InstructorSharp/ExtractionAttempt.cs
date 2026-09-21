@@ -6,7 +6,16 @@ namespace InstructorSharp;
 /// </summary>
 public sealed class ExtractionAttempt
 {
-    internal ExtractionAttempt(
+    /// <summary>Creates a record of one attempt. Public so that <see cref="IInstructor"/> can be
+    /// implemented outside this assembly -- a test fake, an in-memory stub, or a decorator.</summary>
+    /// <param name="attemptNumber">1-based index of this attempt.</param>
+    /// <param name="mode">The mode used.</param>
+    /// <param name="rawResponse">Raw model text, or null if the call itself threw.</param>
+    /// <param name="failures">Why the attempt was rejected; empty when it succeeded.</param>
+    /// <param name="exception">The transport or deserialization exception, when one occurred.</param>
+    /// <param name="inputTokens">Prompt tokens billed, or 0 when unreported.</param>
+    /// <param name="outputTokens">Completion tokens billed, or 0 when unreported.</param>
+    public ExtractionAttempt(
         int attemptNumber,
         ExtractionMode mode,
         string? rawResponse,
@@ -18,7 +27,7 @@ public sealed class ExtractionAttempt
         AttemptNumber = attemptNumber;
         Mode = mode;
         RawResponse = rawResponse;
-        Failures = failures;
+        Failures = failures ?? Array.Empty<ValidationFailure>();
         Exception = exception;
         InputTokens = inputTokens;
         OutputTokens = outputTokens;

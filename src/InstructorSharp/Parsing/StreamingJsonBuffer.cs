@@ -24,8 +24,12 @@ namespace InstructorSharp.Parsing;
 internal sealed class StreamingJsonBuffer
 {
     private readonly Encoder _encoder = Encoding.UTF8.GetEncoder();
+    private readonly int _maxBytes;
     private byte[] _bytes = new byte[1024];
     private int _length;
+    private bool _flushed;
+
+    internal StreamingJsonBuffer(int maxBytes) => _maxBytes = maxBytes;
 
     /// <summary>Total bytes accumulated so far.</summary>
     internal int Length => _length;
@@ -39,8 +43,21 @@ internal sealed class StreamingJsonBuffer
             return;
         }
 
-        // GetByteCount with flush:false accounts for any surrogate still held from last time.
-        int required = _encoder.GetByteCount(chunk.ToCharArray(), 0, chunk.Length, flush: false);
+        // GetMaxByteCount rather than GetByteCount: it is a pure calculation on the encoding,
+        // whereas GetByteCount runs through the stateful encoder. The worst case it reserves is
+        // (n+1)*3 bytes, which also covers a surrogate held over from the previous chunk.
+        int required = Encoding.UTF8.GetMaxByteCount(chunk.Length);
+
+        // A model that loops can stream without end. Without a ceiling the buffer grows until the
+        // process dies, and the caller's cancellation token cannot help because the growth happens
+        // between yields.
+        if ((long)_length + required > _maxBytes)
+        {
+            throw new InstructorException(
+                $"The streamed response exceeded {_maxBytes} bytes without completing. " +
+                "Raise InstructorOptions.MaxStreamBytes if this limit is too low for your payloads.");
+        }
+
         EnsureCapacity(_length + required);
 
         int written = _encoder.GetBytes(
@@ -61,7 +78,35 @@ internal sealed class StreamingJsonBuffer
 
     /// <summary>Decodes everything accumulated. Call once, at the end of the stream.</summary>
     /// <returns>The full streamed text.</returns>
-    internal string GetText() => Encoding.UTF8.GetString(_bytes, 0, _length);
+    internal string GetText()
+    {
+        Flush();
+        return Encoding.UTF8.GetString(_bytes, 0, _length);
+    }
+
+    /// <summary>
+    /// Releases anything the encoder is still holding. Without this a response whose final chunk
+    /// ends on an unpaired high surrogate loses that character silently, which is the opposite of
+    /// what the stateful encoder is here to achieve.
+    /// </summary>
+    private void Flush()
+    {
+        if (_flushed)
+        {
+            return;
+        }
+
+        _flushed = true;
+
+        int required = _encoder.GetByteCount([], 0, 0, flush: true);
+        if (required == 0)
+        {
+            return;
+        }
+
+        EnsureCapacity(_length + required);
+        _length += _encoder.GetBytes([], 0, 0, _bytes, _length, flush: true);
+    }
 
     private void EnsureCapacity(int required)
     {
@@ -70,12 +115,17 @@ internal sealed class StreamingJsonBuffer
             return;
         }
 
-        int capacity = _bytes.Length;
+        // Doubling a signed int overflows to a negative once past 2^30, after which the loop
+        // below would never terminate and would spin a core indefinitely.
+        long capacity = _bytes.Length;
         while (capacity < required)
         {
             capacity *= 2;
         }
 
-        Array.Resize(ref _bytes, capacity);
+        Array.Resize(ref _bytes, (int)Math.Min(capacity, MaxArrayLength));
     }
+
+    /// <summary>Largest array the runtime will allocate, conservatively stated.</summary>
+    private const int MaxArrayLength = 0x7FFFFFC7;
 }

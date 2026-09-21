@@ -24,29 +24,68 @@ jobs:
             8.0.x
             10.0.x
 
-      - name: Derive version from tag
+      # The tag name is attacker-controlled in the sense that anything matching v*.*.* triggers
+      # this job, and git accepts refs containing ';', '$(...)' and backticks. Interpolating it
+      # straight into a run: block would hand shell execution to whoever can push a tag, in the
+      # one job that holds the NuGet key. So it is validated against a strict pattern first and
+      # then only ever crosses into the shell through the environment, quoted.
+      - name: Derive and validate version from tag
         id: version
-        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+        env:
+          TAG_NAME: ${{ github.ref_name }}
+        run: |
+          version="${TAG_NAME#v}"
+          if ! printf '%s' "$version" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$'; then
+            echo "::error::Tag '$TAG_NAME' is not a valid semantic version."
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      # Build once, with the exact properties the packages will carry, then test and pack that
+      # same output. Building separately for test and for pack would mean the assemblies that
+      # ship were never the assemblies that passed.
+      - name: Build
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: >
+          dotnet build --configuration Release -warnaserror
+          -p:Version="$VERSION"
+          -p:IsTrimmable=true
 
       - name: Test
-        run: dotnet test --configuration Release
+        run: dotnet test --no-build --configuration Release
 
       - name: Pack
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
         run: >
-          dotnet pack --configuration Release
-          -p:Version=${{ steps.version.outputs.version }}
+          dotnet pack --no-build --configuration Release
+          -p:Version="$VERSION"
           -p:IsTrimmable=true
-          --output ${{ github.workspace }}/artifacts
+          --output "${{ github.workspace }}/artifacts"
 
+      # Pushed one at a time so a failure names the package that failed. --skip-duplicate is
+      # deliberately absent: a version already on nuget.org can never be replaced, so a silent
+      # "skipped" would hide a half-published release behind a green check.
       - name: Push to NuGet
-        run: >
-          dotnet nuget push "artifacts/*.nupkg"
-          --api-key ${{ secrets.NUGET_API_KEY }}
-          --source https://api.nuget.org/v3/index.json
-          --skip-duplicate
+        env:
+          NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
+        run: |
+          shopt -s nullglob
+          packages=(artifacts/*.nupkg)
+          if [ ${#packages[@]} -eq 0 ]; then
+            echo "::error::No packages were produced."
+            exit 1
+          fi
+          for package in "${packages[@]}"; do
+            echo "Pushing $package"
+            dotnet nuget push "$package" --source https://api.nuget.org/v3/index.json
+          done
 
       - name: Create GitHub release
-        uses: softprops/action-gh-release@v2
+        # Pinned to a commit rather than a moving tag: this job holds the publishing key, and a
+        # third-party tag can be repointed at any time.
+        uses: softprops/action-gh-release@c95fe1489396fe8a9eb87c0abf8aa5b2ef267fda # v2.2.1
         with:
           generate_release_notes: true
           files: artifacts/*.*nupkg
