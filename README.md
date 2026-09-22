@@ -339,11 +339,21 @@ without them a trimmed or AOT-published app will fail at runtime, not at build t
   and AOT support as future work. If you are on .NET 8+ and do not need those, it is a reasonable
   choice and you should look at it.
 
+## Verifying against a real model
+
+```bash
+dotnet run --project samples/InstructorSharp.LiveCheck
+```
+
+It prints how to point itself at Gemini or a local Ollama, both free and neither requiring a
+payment card, then checks objects, `List<T>` and `int` as root types, enums, the repair loop and
+streaming against the real provider. See `samples/InstructorSharp.LiveCheck/README.md`.
+
 ## Contributing
 
 Issues and PRs welcome. `dotnet test` runs the full suite offline in about a second; no API key
-is needed and no network call is made. Live provider tests live in `tests/**/Integration` and
-skip themselves unless the relevant key is set.
+is needed and no network call is made. The suite runs on .NET 10, .NET 8 and .NET Framework 4.7.2,
+so the netstandard2.0 asset is executed rather than merely compiled.
 
 ## License
 

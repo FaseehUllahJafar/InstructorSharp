@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>false</IsPackable>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <RootNamespace>InstructorSharp.LiveCheck</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- Both providers below are free and need no payment card. See the README next to this file. -->
+    <PackageReference Include="Microsoft.Extensions.AI.OpenAI" Version="10.10.0" />
+    <PackageReference Include="OllamaSharp" Version="5.4.30" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\InstructorSharp\InstructorSharp.csproj" />
+  </ItemGroup>
+</Project>
