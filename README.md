@@ -3,7 +3,6 @@
 **Validated, strongly-typed objects out of any LLM — with automatic repair when the model gets it wrong.**
 
 [![CI](https://github.com/FaseehUllahJafar/InstructorSharp/actions/workflows/ci.yml/badge.svg)](https://github.com/FaseehUllahJafar/InstructorSharp/actions/workflows/ci.yml)
-[![NuGet](https://img.shields.io/nuget/v/InstructorSharp.svg)](https://www.nuget.org/packages/InstructorSharp)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 The single most common thing anyone needs from an LLM is a validated, typed object rather than a
@@ -57,8 +56,13 @@ Models are markedly better at correcting a specific mistake than at re-doing the
 
 ## Install
 
+> **Not on NuGet yet.** The first package release is pending. The release workflow
+> (`.github/workflows/release.yml`) publishes on a `v*.*.*` tag. Until then, reference the project
+> from source:
+
 ```bash
-dotnet add package InstructorSharp
+git clone https://github.com/FaseehUllahJafar/InstructorSharp.git
+dotnet add <YourProject>.csproj reference InstructorSharp/src/InstructorSharp/InstructorSharp.csproj
 ```
 
 Then bring your own model. InstructorSharp depends on **no provider SDK** — it works with any
@@ -71,8 +75,7 @@ dotnet add package OllamaSharp                        # Ollama
 ```
 
 **Targets:** .NET 10, .NET 8, and **.NET Standard 2.0 — so it runs on .NET Framework 4.6.2+.**
-If you are maintaining a Framework 4.8 service, this is the only structured-extraction library
-for C# you can actually install.
+If you are maintaining a Framework 4.8 service, the same API works there unchanged.
 
 ---
 
@@ -133,7 +136,7 @@ Write the message as an instruction to the model, because that is where it goes.
 ### Already have FluentValidation rules?
 
 ```bash
-dotnet add package InstructorSharp.FluentValidation
+dotnet add <YourProject>.csproj reference InstructorSharp/src/InstructorSharp.FluentValidation/InstructorSharp.FluentValidation.csproj
 ```
 
 ```csharp
