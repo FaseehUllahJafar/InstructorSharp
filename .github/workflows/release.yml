@@ -51,7 +51,7 @@ jobs:
         run: >
           dotnet build --configuration Release -warnaserror
           -p:Version="$VERSION"
-          -p:IsTrimmable=true
+          -p:PackTrimmable=true
 
       - name: Test
         run: dotnet test --no-build --configuration Release
@@ -62,7 +62,7 @@ jobs:
         run: >
           dotnet pack --no-build --configuration Release
           -p:Version="$VERSION"
-          -p:IsTrimmable=true
+          -p:PackTrimmable=true
           --output "${{ github.workspace }}/artifacts"
 
       # Exchange GitHub's OIDC token for a 1-hour nuget.org key (Trusted Publishing). No stored

@@ -16,9 +16,12 @@
     <!--
       Trim/AOT analyzers run on every modern target so reflection creeping into the extraction
       path fails the build rather than failing in someone's published app. IsTrimmable (which
-      stamps the assembly and pulls in the ILLink tasks) is applied at pack time via the
-      -p:IsTrimmable=true switch in CI, keeping ordinary local builds light.
+      stamps the assembly and pulls in the ILLink tasks) is switched on in CI with
+      -p:PackTrimmable=true, keeping ordinary local builds light. It is a library-only switch:
+      passing IsTrimmable itself on the command line would also make the tests and samples
+      trimmable, and their deliberate reflection then fails the -warnaserror release build.
     -->
+    <IsTrimmable Condition="'$(PackTrimmable)' == 'true'">true</IsTrimmable>
     <EnableAotAnalyzer Condition="'$(TargetFramework)' != 'netstandard2.0'">true</EnableAotAnalyzer>
     <EnableTrimAnalyzer Condition="'$(TargetFramework)' != 'netstandard2.0'">true</EnableTrimAnalyzer>
     <EnableSingleFileAnalyzer Condition="'$(TargetFramework)' != 'netstandard2.0'">true</EnableSingleFileAnalyzer>

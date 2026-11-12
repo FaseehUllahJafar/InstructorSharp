@@ -82,7 +82,7 @@ jobs:
       - name: Pack
         run: >
           dotnet pack --configuration Release
-          -p:IsTrimmable=true
+          -p:PackTrimmable=true
           --output ${{ github.workspace }}/artifacts
 
       - name: Upload packages

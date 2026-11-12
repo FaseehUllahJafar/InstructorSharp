@@ -6,6 +6,8 @@
     <Title>InstructorSharp.FluentValidation</Title>
     <Description>FluentValidation adapter for InstructorSharp. Use your existing AbstractValidator rules to validate LLM output, with failures fed back to the model as corrective feedback addressed by JSON path.</Description>
     <PackageTags>llm;structured-output;fluentvalidation;validation;instructor;ai</PackageTags>
+    <!-- Library-only trimming switch; see the note in InstructorSharp.csproj. -->
+    <IsTrimmable Condition="'$(PackTrimmable)' == 'true'">true</IsTrimmable>
   </PropertyGroup>
 
   <ItemGroup>
