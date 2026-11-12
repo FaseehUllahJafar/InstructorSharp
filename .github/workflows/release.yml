@@ -8,6 +8,7 @@ on:
 
 permissions:
   contents: write
+  id-token: write   # lets the job ask GitHub for the token nuget.org exchanges for a 1-hour key
 
 jobs:
   publish:
@@ -64,12 +65,22 @@ jobs:
           -p:IsTrimmable=true
           --output "${{ github.workspace }}/artifacts"
 
+      # Exchange GitHub's OIDC token for a 1-hour nuget.org key (Trusted Publishing). No stored
+      # secret key exists to leak. Placed right before the push because the key expires after an hour.
+      - name: NuGet login
+        # Pinned to a commit like the release action below: a moving tag in this job could be
+        # repointed at code that sees the publishing key.
+        uses: NuGet/login@8d196754b4036150537f80ac539e15c2f1028841 # v1.2.0
+        id: login
+        with:
+          user: ${{ secrets.NUGET_USER }}
+
       # Pushed one at a time so a failure names the package that failed. --skip-duplicate is
       # deliberately absent: a version already on nuget.org can never be replaced, so a silent
       # "skipped" would hide a half-published release behind a green check.
       - name: Push to NuGet
         env:
-          NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
+          NUGET_API_KEY: ${{ steps.login.outputs.NUGET_API_KEY }}
         run: |
           shopt -s nullglob
           packages=(artifacts/*.nupkg)
@@ -79,7 +90,7 @@ jobs:
           fi
           for package in "${packages[@]}"; do
             echo "Pushing $package"
-            dotnet nuget push "$package" --source https://api.nuget.org/v3/index.json
+            dotnet nuget push "$package" --api-key "$NUGET_API_KEY" --source https://api.nuget.org/v3/index.json
           done
 
       - name: Create GitHub release
