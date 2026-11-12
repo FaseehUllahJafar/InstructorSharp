@@ -155,7 +155,10 @@ static IChatClient CreateClient(out string description)
     {
         // Gemini exposes an OpenAI-compatible endpoint, so the OpenAI client drives it with only
         // a changed base address. The free tier serves the Flash models and needs no payment card.
-        string model = Environment.GetEnvironmentVariable("GEMINI_MODEL") ?? "gemini-2.5-flash";
+        // gemini-2.5-flash was withdrawn for new keys (404). 3.5-flash is on the free tier and
+        // answered every check; 3.8-flash exists but its free quota is often exhausted (429).
+        // Override with GEMINI_MODEL when Google moves the free tier again.
+        string model = Environment.GetEnvironmentVariable("GEMINI_MODEL") ?? "gemini-3.5-flash";
 
         var options = new OpenAIClientOptions
         {
